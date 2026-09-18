@@ -14,8 +14,8 @@
 /*************************END INCLUDES********************************/
 
 /**************************DEFINES************************************/
-#define WS2812_LED_COUNT      1U       // Physical strip length
-#define WS2812_TIMER          htim1     // Timer configured in CubeMX
+#define WS2812_LED_COUNT      12U       // Physical strip length
+#define WS2812_TIMER          htim3     // Timer configured in CubeMX
 #define WS2812_CHANNEL        TIM_CHANNEL_1
 #define WS2812_ACTIVE_CHANNEL HAL_TIM_ACTIVE_CHANNEL_1
 

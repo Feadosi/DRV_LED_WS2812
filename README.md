@@ -36,9 +36,12 @@ an actual **timer input clock of 120 MHz**.
 | Pulse | 0 |
 | Output compare preload | Enable |
 | Fast mode | Disable |
-| CH polarity | High |
+| CH polarity | High for direct open-drain; Low for the MOSFET circuit below |
 
 ![TIM3 PWM configuration in CubeMX](docs/images/tim3-pwm-settings.png)
+
+The screenshot shows the direct open-drain option. For the MOSFET option,
+change CH Polarity to Low. Other timer and DMA settings stay unchanged.
 
 The PWM frequency is `120 MHz / ((0 + 1) * (149 + 1)) = 800 kHz`.
 Each period lasts 1.25 us. The library uses compare values 48 for a zero bit
@@ -81,11 +84,26 @@ Keep interrupt processing short enough to refill each half within its 30 us wind
 
 ## 4. Configure the output and library macros
 
-### Hardware connection
+### Choose the output circuit
 
-For this project's open-drain output, **connect DIN to +5 V through an external
-pull-up resistor**. Connect PC6 / TIM3_CH1 to the same DIN node on the first LED.
-The resistor goes between DIN and +5 V, not in series between PC6 and DIN.
+Both options connect to DIN on the first LED. Connect its DOUT to DIN on the
+next LED. Power the strip from +5 V and connect the supply ground, strip ground
+and STM32 ground together.
+
+| CubeMX setting | Direct connection with pull-up | N-channel MOSFET inverter |
+| --- | --- | --- |
+| Pin / signal | PC6 / TIM3_CH1 | PC6 / TIM3_CH1 |
+| PWM mode | PWM mode 1 | PWM mode 1 |
+| CH polarity | High (`TIM_OCPOLARITY_HIGH`) | Low (`TIM_OCPOLARITY_LOW`) |
+| GPIO mode | Alternate Function Open Drain (`GPIO_MODE_AF_OD`) | Alternate Function Push Pull (`GPIO_MODE_AF_PP`) |
+| GPIO pull-up/pull-down | No pull-up and no pull-down | No pull-up and no pull-down |
+| Maximum output speed | Very High | Very High |
+
+### Option A: direct connection with a pull-up resistor
+
+Connect PC6 directly to DIN. **Connect an external pull-up resistor between DIN
+and +5 V**, not in series between PC6 and DIN. The open-drain output pulls the
+line low; the resistor raises it when the output releases it.
 
 ```text
                        +5 V
@@ -100,25 +118,66 @@ Supply GND --------+----------- GND (strip)
                 STM32 GND
 ```
 
-Use a common ground for the MCU, strip and its power supply. The external resistor
-provides the high level when the open-drain output releases the line. Its value
-must suit the line capacitance and the pin's sink-current capability so that the
-signal rises fast enough at 800 kHz. This connection assumes a GPIO that tolerates
-the external 5 V level in the selected mode; verify this when changing the MCU or pin.
+Select the resistance for the line capacitance and the GPIO's sink-current
+capability, so the signal rises fast enough at 800 kHz. This connection requires
+a GPIO that tolerates the external 5 V in the selected mode; verify this when
+changing the MCU or pin.
 
-### GPIO settings in CubeMX
+![PC6 direct open-drain GPIO configuration in CubeMX](docs/images/pc6-gpio-settings.png)
 
-| Setting | Value |
-| --- | --- |
-| Pin / signal | PC6 / TIM3_CH1 |
-| GPIO mode | Alternate Function Open Drain |
-| GPIO pull-up/pull-down | No pull-up and no pull-down |
-| Maximum output speed | Very High |
+The internal pull-up is disabled; use the external resistor shown above.
 
-![PC6 GPIO configuration in CubeMX](docs/images/pc6-gpio-settings.png)
+### Option B: N-channel MOSFET inverter
 
-The internal pull-up is disabled; the external resistor to +5 V is required for
-this open-drain connection.
+Use an N-channel MOSFET suitable for a 3.3 V gate drive and fast switching.
+Connect **source to GND**, **drain to DIN**, and **gate to the STM32 output through
+a gate resistor**. Check the actual transistor's datasheet for its pinout:
+G, D and S below identify terminals, not physical pin positions. This circuit
+is for an N-channel MOSFET, not a PNP transistor.
+
+```text
+                                      +5 V
+                                        |
+                                     R pull-up
+                                        |
+                                        +--------- DIN (first WS2812)
+                                        |
+                                        D
+STM32 PC6 / TIM3_CH1 --- R gate --- G   Q1 (N-channel MOSFET)
+                                        S
+                                        |
+STM32 GND ------------------------------+--------- GND (strip)
+                                        |
+                                    Supply GND
+
+5 V supply --------------------------------------- +5 V (strip)
+```
+
+The pull-up from DIN to +5 V is still required. Choose the pull-up and gate
+resistor values for the actual transistor and wiring: excessive gate resistance
+or line capacitance can distort short pulses. The gate receives STM32 logic;
+the +5 V pull-up connects to the drain/DIN node.
+
+The transistor inverts the signal: a high gate level pulls DIN low, and a low
+gate level lets the pull-up raise DIN. Set **CH Polarity = Low** to compensate.
+Configure GPIO as **Alternate Function Push Pull**, with no pull-up/pull-down
+and Very High speed, as shown below.
+
+![PC6 GPIO configuration for the N-channel MOSFET in CubeMX](docs/images/pc6-mosfet-gpio-settings.png)
+
+### Check the signal at DIN
+
+For either circuit, measure at the first LED's DIN, after any transistor:
+
+- Bit period: approximately 1.25 us.
+- High pulse for a zero: approximately 0.40 us.
+- High pulse for a one: approximately 0.79 us.
+- Reset interval: low; this library sends 360 us of low samples before and after data.
+
+With the MOSFET circuit PC6 is inverted relative to DIN; decode the DIN waveform
+when checking GRB data. Also inspect the level between frames: the library
+disables the timer channel after transmission, so active PWM polarity alone
+does not guarantee the pin level after the channel is disabled.
 
 ### Library macros
 
@@ -136,8 +195,16 @@ uses `TIM_CHANNEL_2` and `HAL_TIM_ACTIVE_CHANNEL_2`. The timer handle must be
 initialized by CubeMX and declared in `tim.h`.
 
 The PWM buffer always holds 48 samples. Color storage uses three bytes per LED.
-With the current configuration, two zero-filled halves precede the pixel data
-and two follow it: each low interval is 60 us. Reset generation is automatic.
+With `WS2812_RESET_HALVES = 12U`, twelve zero-filled halves precede the pixel
+data and twelve follow it. Each half contains 24 periods of 1.25 us, so each
+reset interval lasts `12 * 24 * 1.25 us = 360 us`. Reset generation is automatic.
+
+The required reset duration depends on the LED revision. For example,
+[Worldsemi WS2812B V5](https://files.keeb.supply/products/ws2812b-rgb-led/datasheet.pdf)
+requires a low interval longer than 280 us. The previous 60 us setting caused
+incorrect frame handling on the tested LEDs; increasing it to 360 us resolved
+the issue. Keep this setting unless the actual LED datasheet permits a shorter
+interval. If the PWM period changes, recalculate the reset duration as well.
 
 ## 5. Initialize the library
 

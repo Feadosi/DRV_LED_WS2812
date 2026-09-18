@@ -94,6 +94,7 @@ int main(void)
   MX_GPIO_Init();
   MX_DMA_Init();
   MX_TIM3_Init();
+  MX_TIM1_Init();
   /* USER CODE BEGIN 2 */
   WS2812_Init();
   WS2812_SetBrightness(50);
@@ -148,6 +149,9 @@ int main(void)
       HAL_Delay(100);
     }
     HAL_Delay(1000); // Hold the per-LED rainbow before testing the fill
+    */
+
+    /*
     for (uint16_t hue = 0U; hue < WS2812_HUE_RANGE; ++hue)
     {
       uint32_t startTick = HAL_GetTick();
@@ -173,6 +177,7 @@ int main(void)
       }
       HAL_Delay(20);
     }
+    HAL_Delay(1000);
     */
     /* USER CODE END WHILE */
 
@@ -260,6 +265,3 @@ void assert_failed(uint8_t *file, uint32_t line)
   /* USER CODE END 6 */
 }
 #endif /* USE_FULL_ASSERT */
-
-
-

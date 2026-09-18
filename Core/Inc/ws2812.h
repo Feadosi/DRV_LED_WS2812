@@ -14,8 +14,8 @@
 /*************************END INCLUDES********************************/
 
 /**************************DEFINES************************************/
-#define WS2812_LED_COUNT      12U       // Physical strip length
-#define WS2812_TIMER          htim3     // Timer configured in CubeMX
+#define WS2812_LED_COUNT      1U       // Physical strip length
+#define WS2812_TIMER          htim1     // Timer configured in CubeMX
 #define WS2812_CHANNEL        TIM_CHANNEL_1
 #define WS2812_ACTIVE_CHANNEL HAL_TIM_ACTIVE_CHANNEL_1
 
@@ -28,7 +28,7 @@
 #define WS2812_BITS_PER_LED   24U
 
 #define WS2812_PWM_SIZE       (2U * WS2812_BITS_PER_LED)
-#define WS2812_RESET_HALVES   2U        // 48 low periods = 60 us; at least 50 us
+#define WS2812_RESET_HALVES   12U        // 288 low periods = 360 us per reset interval
 #define WS2812_ZERO_TICKS     48U       // Timer clock 120 MHz, ARR = 149
 #define WS2812_ONE_TICKS      95U       // Period = 1.25us; ONE_TICK = 0.8us = 95; ZERO_TICK = 0.4us = 48
 
